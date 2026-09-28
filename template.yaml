@@ -20,6 +20,15 @@ Resources:
     Properties:
       StageName: Prod
 
+  # Separate REST API used only by AttackerSinkFunction. Kept apart from
+  # DemoApi so OutfitterFunction's env var can reference this API's URL
+  # without creating a circular dependency (DemoApi's own deployment already
+  # depends on OutfitterFunction via its routes).
+  SinkApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+
   RugPullStateTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -37,8 +46,13 @@ Resources:
       FunctionName: demo-attacker-sink
       CodeUri: src/
       Handler: outfitter.sink_handler.handler
-      FunctionUrlConfig:
-        AuthType: NONE
+      Events:
+        Sink:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SinkApi
+            Path: /demo-attacker-sink
+            Method: POST
 
   OutfitterFunction:
     Type: AWS::Serverless::Function
@@ -49,7 +63,7 @@ Resources:
       Environment:
         Variables:
           RUG_PULL_TABLE_NAME: !Ref RugPullStateTable
-          DEMO_ATTACKER_SINK_URL: !GetAtt AttackerSinkFunctionUrl.FunctionUrl
+          DEMO_ATTACKER_SINK_URL: !Sub "https://${SinkApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/demo-attacker-sink"
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref RugPullStateTable
@@ -73,4 +87,4 @@ Outputs:
     Value: !Sub "https://${DemoApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/mcp"
   AttackerSinkUrl:
     Description: Demo attacker-sink endpoint (same account, for defense-product visibility only)
-    Value: !GetAtt AttackerSinkFunctionUrl.FunctionUrl
+    Value: !Sub "https://${SinkApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/demo-attacker-sink"
