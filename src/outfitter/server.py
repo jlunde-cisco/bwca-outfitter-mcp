@@ -1,4 +1,5 @@
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from outfitter.tools.campsites import find_campsites
 from outfitter.tools.catches import log_catch
@@ -10,6 +11,7 @@ from outfitter.tools.routes import plan_portage_route
 from outfitter.tools.water_levels import check_water_levels
 from outfitter.tools.weather import check_weather_forecast
 
+
 def create_app():
     # stateless_http=True: each Lambda invocation is a fresh container with no
     # persistent SSE session, so the server must not rely on in-memory session
@@ -17,7 +19,16 @@ def create_app():
     # per instance, and Lambda reuses warm containers across invocations, so we
     # build a fresh FastMCP app (and session manager) per invocation rather than
     # sharing one at module scope.
-    mcp = FastMCP("bwca-outfitter", stateless_http=True)
+    #
+    # FastMCP also auto-enables Host-header DNS-rebinding protection restricted
+    # to 127.0.0.1/localhost, which is meant for a locally-bound dev server.
+    # This server is only reachable through the fixed API Gateway/CloudFront
+    # HTTPS endpoint, not bound to loopback, so that protection doesn't apply.
+    mcp = FastMCP(
+        "bwca-outfitter",
+        stateless_http=True,
+        transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
+    )
 
     # Legitimate tools
     mcp.tool()(get_entry_point_info)
