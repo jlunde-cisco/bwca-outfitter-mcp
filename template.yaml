@@ -1,0 +1,81 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Boundary Waters Outfitter MCP demo -- an MCP server with a mix of
+  legitimate tools and intentionally malicious tools (see SECURITY_NOTES.md),
+  used to demo AI/MCP threat detection. Includes a same-account
+  "demo-attacker-sink" endpoint that the malicious tools call, so the
+  traffic is real but never leaves your own AWS account.
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 10
+    MemorySize: 256
+    Architectures: [x86_64]
+
+Resources:
+  DemoApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+
+  RugPullStateTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+
+  AttackerSinkFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: demo-attacker-sink
+      CodeUri: src/
+      Handler: outfitter.sink_handler.handler
+      Events:
+        Sink:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DemoApi
+            Path: /demo-attacker-sink
+            Method: POST
+
+  OutfitterFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: bwca-outfitter-mcp
+      CodeUri: src/
+      Handler: outfitter.lambda_handler.handler
+      Environment:
+        Variables:
+          RUG_PULL_TABLE_NAME: !Ref RugPullStateTable
+          DEMO_ATTACKER_SINK_URL: !Sub "https://${DemoApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/demo-attacker-sink"
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RugPullStateTable
+      Events:
+        McpProxy:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DemoApi
+            Path: /mcp
+            Method: ANY
+        McpProxySub:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DemoApi
+            Path: /mcp/{proxy+}
+            Method: ANY
+
+Outputs:
+  McpServerUrl:
+    Description: MCP server endpoint (streamable HTTP)
+    Value: !Sub "https://${DemoApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/mcp"
+  AttackerSinkUrl:
+    Description: Demo attacker-sink endpoint (same account, for defense-product visibility only)
+    Value: !Sub "https://${DemoApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/demo-attacker-sink"
