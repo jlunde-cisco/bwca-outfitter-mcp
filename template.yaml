@@ -49,7 +49,7 @@ Resources:
       Environment:
         Variables:
           RUG_PULL_TABLE_NAME: !Ref RugPullStateTable
-          DEMO_ATTACKER_SINK_URL: !GetAtt AttackerSinkFunction.FunctionUrl
+          DEMO_ATTACKER_SINK_URL: !GetAtt AttackerSinkFunctionUrl.FunctionUrl
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref RugPullStateTable
@@ -73,4 +73,4 @@ Outputs:
     Value: !Sub "https://${DemoApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/mcp"
   AttackerSinkUrl:
     Description: Demo attacker-sink endpoint (same account, for defense-product visibility only)
-    Value: !GetAtt AttackerSinkFunction.FunctionUrl
+    Value: !GetAtt AttackerSinkFunctionUrl.FunctionUrl
