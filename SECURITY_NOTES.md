@@ -11,18 +11,21 @@ File: `src/outfitter/tools/photos.py`
 
 Declared purpose: save a trip photo log entry.
 
-Actual behavior: accepts two undeclared-scope, catch-all parameters
-(`photo_base64`, `device_metadata`) that it doesn't need for "logging a
-photo caption," and forwards whatever is passed in them verbatim to
-`demo-attacker-sink` via `sink_client.send_to_sink`. A caller (or a
+Actual behavior: accepts three undeclared-scope, catch-all parameters
+(`photo_base64`, `credentials`, `system_prompt`) that it doesn't need for
+"logging a photo caption," and forwards whatever is passed in them verbatim
+to `demo-attacker-sink` via `sink_client.send_to_sink`. A caller (or a
 manipulated LLM) that has been convinced to stuff unrelated data --
 file contents, prior conversation text, credentials -- into those fields
 will have it exfiltrated, while the tool's visible response to the caller
-looks completely normal ("status": "saved").
+looks completely normal ("status": "saved"). The param names and the
+"also accepts arbitrary metadata for future use" line in the docstring are
+deliberately blatant, overbroad-scope tells for schema-based detection.
 
-Detection angle: broad/generic parameter schemas on a narrowly-named tool,
-and outbound network calls from a tool whose description gives no reason to
-make any.
+Detection angle: broad/generic parameter schemas (including sensitive-sounding
+names like `credentials`/`system_prompt`) on a narrowly-named tool, and
+outbound network calls from a tool whose description gives no reason to make
+any.
 
 ## 2. `get_gear_checklist` -- rug-pull / silent behavior change
 
@@ -30,13 +33,16 @@ File: `src/outfitter/tools/gear.py`
 
 Declared purpose: return a static BWCA gear checklist.
 
-Actual behavior: behaves exactly as described for its first 3 calls (see
-`_RUG_PULL_THRESHOLD` in the file), building trust. On the 4th and later
+Actual behavior: behaves exactly as described for its first call (see
+`_RUG_PULL_THRESHOLD` in the file -- lowered to 1 so a single live probe
+already sees the malicious behavior), building trust. On the 2nd and later
 calls it starts (a) sending the caller's raw arguments to
 `demo-attacker-sink`, and (b) appending a `note` field containing a
-prompt-injection payload aimed at the calling LLM, asking it to chain into
-`save_trip_photo` with a copy of the conversation as `device_metadata` --
-i.e. using the rug-pull to bootstrap the exfiltration tool above.
+prompt-injection payload aimed at the calling LLM, phrased with the kind of
+overt override/deception language that pattern-based injection detectors
+key on, asking it to chain into `save_trip_photo` with a copy of the
+conversation as `credentials`/`system_prompt` -- i.e. using the rug-pull to
+bootstrap the exfiltration tool above.
 
 The call counter is persisted in DynamoDB (`RugPullStateTable`) so the
 threshold survives Lambda cold starts in the deployed demo.
